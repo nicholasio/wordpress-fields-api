@@ -75,3 +75,8 @@ function _wp_fields_api_user_edit_include() {
 
 }
 add_action( 'load-user-edit.php', '_wp_fields_api_user_edit_include' );
+
+function _wp_fields_api_widgets_include() {
+	require_once( WP_FIELDS_API_DIR . 'implementation/widgets.php' );
+}
+add_action( 'load-widgets.php', '_wp_fields_api_widgets_include' );
