@@ -993,6 +993,13 @@ final class WP_Customize_Manager {
 		 */
 		global $wp_fields;
 
+		// Handle backwards compatibility to handle 'type'
+		if ( ! is_object( $id ) ) {
+			$id = new WP_Customize_Setting( $this, $id, $args );
+
+			$args = array();
+		}
+
 		$wp_fields->add_field( 'customizer', $id, $this->get_customizer_object_name(), $args );
 
 	}
@@ -1079,7 +1086,7 @@ final class WP_Customize_Manager {
 
 		$field = $wp_fields->get_field( 'customizer', $id, $this->get_customizer_object_name() );
 
-		if ( $field ) {
+		if ( $field && is_a( $field, 'WP_Customize_Setting' ) ) {
 			return $field;
 		}
 
@@ -1123,6 +1130,13 @@ final class WP_Customize_Manager {
 		 */
 		global $wp_fields;
 
+		// Handle backwards compatibility to handle 'type'
+		if ( ! is_object( $id ) ) {
+			$id = new WP_Customize_Panel( $this, $id, $args );
+
+			$args = array();
+		}
+
 		$wp_fields->add_screen( 'customizer', $id, $this->get_customizer_object_name(), $args );
 
 	}
@@ -1147,7 +1161,7 @@ final class WP_Customize_Manager {
 
 		$panel = $wp_fields->get_screen( 'customizer', $id, $this->get_customizer_object_name() );
 
-		if ( $panel ) {
+		if ( $panel && is_a( $panel, 'WP_Customize_Panel' ) ) {
 			return $panel;
 		}
 
@@ -1195,7 +1209,17 @@ final class WP_Customize_Manager {
 		 */
 		global $wp_fields;
 
-		$wp_fields->register_screen_type( $panel );
+		$type = $panel;
+		$type = str_replace( array( 'WP_Customize_', '_Panel' ), '', $type );
+
+		if ( ! empty( $type ) ) {
+			$type = sanitize_title( $type );
+			$type = 'customize-' . $type;
+		} else {
+			$type = 'panel';
+		}
+
+		$wp_fields->register_screen_type( $type, $panel );
 
 	}
 
@@ -1235,6 +1259,13 @@ final class WP_Customize_Manager {
 		 */
 		global $wp_fields;
 
+		// Handle backwards compatibility to handle 'type'
+		if ( ! is_object( $id ) ) {
+			$id = new WP_Customize_Section( $this, $id, $args );
+
+			$args = array();
+		}
+
 		$wp_fields->add_section( 'customizer', $id, $this->get_customizer_object_name(), $args );
 
 	}
@@ -1258,7 +1289,7 @@ final class WP_Customize_Manager {
 
 		$section = $wp_fields->get_section( 'customizer', $id, $this->get_customizer_object_name() );
 
-		if ( $section ) {
+		if ( $section && is_a( $section, 'WP_Customize_Section' ) ) {
 			return $section;
 		}
 
@@ -1305,7 +1336,17 @@ final class WP_Customize_Manager {
 		 */
 		global $wp_fields;
 
-		$wp_fields->register_section_type( $section );
+		$type = $section;
+		$type = str_replace( array( 'WP_Customize_', '_Section' ), '', $type );
+
+		if ( ! empty( $type ) ) {
+			$type = sanitize_title( $type );
+			$type = 'customize-' . $type;
+		} else {
+			$type = 'section';
+		}
+
+		$wp_fields->register_section_type( $type, $section );
 
 	}
 
@@ -1346,6 +1387,13 @@ final class WP_Customize_Manager {
 		 */
 		global $wp_fields;
 
+		// Handle backwards compatibility to handle 'type'
+		if ( ! is_object( $id ) ) {
+			$id = new WP_Customize_Control( $this, $id, $args );
+
+			$args = array();
+		}
+
 		$wp_fields->add_control( 'customizer', $id, $this->get_customizer_object_name(), $args );
 
 	}
@@ -1369,7 +1417,7 @@ final class WP_Customize_Manager {
 
 		$control = $wp_fields->get_control( 'customizer', $id, $this->get_customizer_object_name() );
 
-		if ( $control ) {
+		if ( $control && is_a( $control, 'WP_Customize_Control' ) ) {
 			return $control;
 		}
 
@@ -1415,7 +1463,17 @@ final class WP_Customize_Manager {
 		 */
 		global $wp_fields;
 
-		$wp_fields->register_control_type( $control );
+		$type = $control;
+		$type = str_replace( array( 'WP_Customize_', '_Control' ), '', $type );
+
+		if ( ! empty( $type ) ) {
+			$type = sanitize_title( $type );
+			$type = 'customize-' . $type;
+		} else {
+			$type = 'control';
+		}
+
+		$wp_fields->register_control_type( $type, $control );
 
 	}
 
@@ -1514,6 +1572,7 @@ final class WP_Customize_Manager {
 		$this->register_section_type( 'WP_Customize_Section' );
 		$this->register_section_type( 'WP_Customize_Sidebar_Section' );
 
+		$this->register_control_type( 'WP_Customize_Control' );
 		$this->register_control_type( 'WP_Customize_Color_Control' );
 		$this->register_control_type( 'WP_Customize_Media_Control' );
 		$this->register_control_type( 'WP_Customize_Upload_Control' );

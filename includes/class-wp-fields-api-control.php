@@ -4,6 +4,8 @@
  *
  * @package WordPress
  * @subpackage Fields_API
+ *
+ * @property array $choices Key/Values used by Multiple choice control types
  */
 class WP_Fields_API_Control {
 
@@ -48,6 +50,14 @@ class WP_Fields_API_Control {
 	 * @var string
 	 */
 	public $object_name = '';
+
+	/**
+	 * Item ID of current item passed to WP_Fields_API_Field for value()
+	 *
+	 * @access public
+	 * @var int|string
+	 */
+	public $item_id;
 
 	/**
 	 * All fields tied to the control.
@@ -100,14 +110,6 @@ class WP_Fields_API_Control {
 	public $description = '';
 
 	/**
-	 * @todo: Remove choices
-	 *
-	 * @access public
-	 * @var array
-	 */
-	public $choices = array();
-
-	/**
 	 * @access public
 	 * @var array
 	 */
@@ -132,6 +134,19 @@ class WP_Fields_API_Control {
 	 *               currently being previewed).
 	 */
 	public $active_callback = '';
+
+	/**
+	 * Capabilities Callback.
+	 *
+	 * @access public
+	 *
+	 * @see WP_Fields_API_Control::check_capabilities()
+	 *
+	 * @var callable Callback is called with one argument, the instance of
+	 *               WP_Fields_API_Control, and returns bool to indicate whether
+	 *               the control has capabilities to be used.
+	 */
+	public $capabilities_callback = '';
 
 	/**
 	 * Constructor.
@@ -178,6 +193,10 @@ class WP_Fields_API_Control {
 			}
 		}
 
+		if ( empty( $this->active_callback ) ) {
+			$this->active_callback = array( $this, 'active_callback' );
+		}
+
 		self::$instance_count += 1;
 		$this->instance_number = self::$instance_count;
 
@@ -210,8 +229,29 @@ class WP_Fields_API_Control {
 	}
 
 	/**
+	 * Setup the choices values and set the choices property to allow dynamic building
+	 */
+	public function setup_choices() {
+
+		if ( ! isset( $this->choices ) ) {
+			$choices = $this->choices();
+
+			$this->choices = $choices;
+		}
+
+	}
+
+	/**
+	 * Get the choices values from the choices property and allow dynamic building
+	 */
+	public function choices() {
+
+		return array();
+
+	}
+
+	/**
 	 * Enqueue control related scripts/styles.
-	 *
 	 */
 	public function enqueue() {}
 
@@ -225,7 +265,11 @@ class WP_Fields_API_Control {
 	final public function active() {
 
 		$control = $this;
-		$active = call_user_func( $this->active_callback, $this );
+		$active = true;
+
+		if ( is_callable( $this->active_callback ) ) {
+			$active = call_user_func( $this->active_callback, $this );
+		}
 
 		/**
 		 * Filter response of WP_Fields_API_Control::active().
@@ -270,7 +314,7 @@ class WP_Fields_API_Control {
 			 */
 			$field = $this->fields[ $field_key ];
 
-			return $field->value();
+			return $field->value( $this->item_id );
 		}
 
 		return null;
@@ -316,18 +360,24 @@ class WP_Fields_API_Control {
 		 * @var $field WP_Fields_API_Field
 		 */
 		foreach ( $this->fields as $field ) {
-			if ( !$field || ! $field->check_capabilities() ) {
+			if ( ! $field || ! $field->check_capabilities() ) {
 				return false;
 			}
 		}
 
 		$section = $wp_fields->get_section( $this->object_type, $this->section, $this->object_name );
 
-		if ( isset( $section ) && ! $section->check_capabilities() ) {
+		if ( $section && ! $section->check_capabilities() ) {
 			return false;
 		}
 
-		return true;
+		$access = true;
+
+		if ( is_callable( $this->capabilities_callback ) ) {
+			$access = call_user_func( $this->capabilities_callback, $this );
+		}
+
+		return $access;
 
 	}
 
@@ -450,109 +500,17 @@ class WP_Fields_API_Control {
 	 */
 	public function render_content() {
 
-		switch ( $this->type ) {
-			case 'checkbox':
-				?>
-				<label>
-					<input type="checkbox" value="<?php echo esc_attr( $this->value() ); ?>" <?php $this->link(); checked( $this->value() ); ?> />
-					<?php echo esc_html( $this->label ); ?>
-					<?php if ( ! empty( $this->description ) ) : ?>
-						<span class="description fields-control-description"><?php echo $this->description; ?></span>
-					<?php endif; ?>
-				</label>
-				<?php
-				break;
-			case 'radio':
-				if ( empty( $this->choices ) )
-					return;
-
-				$name = '_fields-radio-' . $this->id;
-
-				if ( ! empty( $this->label ) ) : ?>
-					<span class="fields-control-title"><?php echo esc_html( $this->label ); ?></span>
-				<?php endif;
-				if ( ! empty( $this->description ) ) : ?>
-					<span class="description fields-control-description"><?php echo $this->description ; ?></span>
-				<?php endif;
-
-				foreach ( $this->choices as $value => $label ) :
-					?>
-					<label>
-						<input type="radio" value="<?php echo esc_attr( $value ); ?>" name="<?php echo esc_attr( $name ); ?>" <?php $this->link(); checked( $this->value(), $value ); ?> />
-						<?php echo esc_html( $label ); ?><br/>
-					</label>
-					<?php
-				endforeach;
-				break;
-			case 'select':
-				if ( empty( $this->choices ) )
-					return;
-
-				?>
-				<label>
-					<?php if ( ! empty( $this->label ) ) : ?>
-						<span class="fields-control-title"><?php echo esc_html( $this->label ); ?></span>
-					<?php endif;
-					if ( ! empty( $this->description ) ) : ?>
-						<span class="description fields-control-description"><?php echo $this->description; ?></span>
-					<?php endif; ?>
-
-					<select <?php $this->link(); ?>>
-						<?php
-						foreach ( $this->choices as $value => $label )
-							echo '<option value="' . esc_attr( $value ) . '"' . selected( $this->value(), $value, false ) . '>' . $label . '</option>';
-						?>
-					</select>
-				</label>
-				<?php
-				break;
-			case 'textarea':
-				?>
-				<label>
-					<?php if ( ! empty( $this->label ) ) : ?>
-						<span class="fields-control-title"><?php echo esc_html( $this->label ); ?></span>
-					<?php endif;
-					if ( ! empty( $this->description ) ) : ?>
-						<span class="description fields-control-description"><?php echo $this->description; ?></span>
-					<?php endif; ?>
-					<textarea rows="5" <?php $this->link(); ?>><?php echo esc_textarea( $this->value() ); ?></textarea>
-				</label>
-				<?php
-				break;
-			case 'dropdown-pages':
-				$dropdown = wp_dropdown_pages(
-					array(
-						'name'              => '_fields-dropdown-pages-' . $this->id,
-						'echo'              => 0,
-						'show_option_none'  => __( '&mdash; Select &mdash;' ),
-						'option_none_value' => '0',
-						'selected'          => $this->value(),
-					)
-				);
-
-				// Hackily add in the data link parameter.
-				$dropdown = str_replace( '<select', '<select ' . $this->get_link(), $dropdown );
-
-				printf(
-					'<label class="fields-control-select"><span class="fields-control-title">%s</span> %s</label>',
-					$this->label,
-					$dropdown
-				);
-				break;
-			default:
-				?>
-				<label>
-					<?php if ( ! empty( $this->label ) ) : ?>
-						<span class="fields-control-title"><?php echo esc_html( $this->label ); ?></span>
-					<?php endif;
-					if ( ! empty( $this->description ) ) : ?>
-						<span class="description fields-control-description"><?php echo $this->description; ?></span>
-					<?php endif; ?>
-					<input type="<?php echo esc_attr( $this->type ); ?>" <?php $this->input_attrs(); ?> value="<?php echo esc_attr( $this->value() ); ?>" <?php $this->link(); ?> />
-				</label>
-				<?php
-				break;
-		}
+		?>
+		<label>
+			<?php if ( ! empty( $this->label ) ) : ?>
+				<span class="fields-control-title"><?php echo esc_html( $this->label ); ?></span>
+			<?php endif;
+			if ( ! empty( $this->description ) ) : ?>
+				<span class="description fields-control-description"><?php echo $this->description; ?></span>
+			<?php endif; ?>
+			<input type="<?php echo esc_attr( $this->type ); ?>" <?php $this->input_attrs(); ?> value="<?php echo esc_attr( $this->value( $this->item_id ) ); ?>" <?php $this->link(); ?> />
+		</label>
+		<?php
 
 	}
 
@@ -589,431 +547,24 @@ class WP_Fields_API_Control {
 
 	}
 
-}
-
-/**
- * Fields API Color Control class.
- *
- * @see WP_Fields_API_Control
- */
-class WP_Fields_API_Color_Control extends WP_Fields_API_Control {
-
 	/**
-	 * @access public
-	 * @var string
-	 */
-	public $type = 'color';
-
-	/**
-	 * @access public
-	 * @var array
-	 */
-	public $statuses = array();
-
-	/**
-	 * Constructor.
+	 * Magic method for handling backwards compatible properties / methods
 	 *
-	 * @since 3.4.0
-	 * @uses WP_Fields_API_Control::__construct()
+	 * @param string $name Parameter name
 	 *
-	 * @param WP_Customize_Manager $manager Customizer bootstrap instance.
-	 * @param string               $id      Control ID.
-	 * @param array                $args    Optional. Arguments to override class property defaults.
+	 * @return mixed|null
 	 */
-	public function __construct( $manager, $id, $args = array() ) {
+	public function &__get( $name ) {
 
-		$this->statuses = array(
-			'' => __( 'Default' ),
-		);
+		// Map $this->choices to $this->choices() for dynamic choice handling
+		if ( 'choices' == $name ) {
+			$this->setup_choices();
 
-		parent::__construct( $manager, $id, $args );
-
-	}
-
-	/**
-	 * Enqueue scripts/styles for the color picker.
-	 *
-	 * @since 3.4.0
-	 */
-	public function enqueue() {
-		wp_enqueue_script( 'wp-color-picker' );
-		wp_enqueue_style( 'wp-color-picker' );
-	}
-
-	/**
-	 * Refresh the parameters passed to the JavaScript via JSON.
-	 *
-	 * @uses WP_Fields_API_Control::json()
-	 */
-	public function json() {
-
-		$json = parent::json();
-
-		$json['statuses']     = $this->statuses;
-		$json['defaultValue'] = $this->setting->default;
-
-		return $json;
-
-	}
-
-	/**
-	 * Don't render the control content from PHP, as it's rendered via JS on load.
-	 */
-	public function render_content() {
-
-		// @todo Figure out what to do for render_content vs content_template for purposes of Customizer vs other Fields implementations
-
-	}
-
-	/**
-	 * Render a JS template for the content of the color picker control.
-	 */
-	public function content_template() {
-
-		// @todo Figure out what to do for render_content vs content_template for purposes of Customizer vs other Fields implementations
-		?>
-		<# var defaultValue = '';
-		if ( data.defaultValue ) {
-			if ( '#' !== data.defaultValue.substring( 0, 1 ) ) {
-				defaultValue = '#' + data.defaultValue;
-			} else {
-				defaultValue = data.defaultValue;
-			}
-			defaultValue = ' data-default-color=' + defaultValue; // Quotes added automatically.
-		} #>
-		<label>
-			<# if ( data.label ) { #>
-				<span class="customize-control-title">{{{ data.label }}}</span>
-			<# } #>
-			<# if ( data.description ) { #>
-				<span class="description customize-control-description">{{{ data.description }}}</span>
-			<# } #>
-			<div class="customize-control-content">
-				<input class="color-picker-hex" type="text" maxlength="7" placeholder="<?php esc_attr_e( 'Hex Value' ); ?>" {{ defaultValue }} />
-			</div>
-		</label>
-		<?php
-	}
-}
-
-/**
- * Customize Media Control class.
- *
- * @since 4.2.0
- *
- * @see WP_Fields_API_Control
- */
-class WP_Fields_API_Media_Control extends WP_Fields_API_Control {
-	/**
-	 * Control type.
-	 *
-	 * @since 4.2.0
-	 * @access public
-	 * @var string
-	 */
-	public $type = 'media';
-
-	/**
-	 * Media control mime type.
-	 *
-	 * @since 4.2.0
-	 * @access public
-	 * @var string
-	 */
-	public $mime_type = '';
-
-	/**
-	 * Button labels.
-	 *
-	 * @since 4.2.0
-	 * @access public
-	 * @var array
-	 */
-	public $button_labels = array();
-
-	/**
-	 * Constructor.
-	 *
-	 * @since 4.1.0
-	 * @since 4.2.0 Moved from WP_Fields_API_Upload_Control.
-	 *
-	 * @param WP_Customize_Manager $manager Customizer bootstrap instance.
-	 * @param string               $id      Control ID.
-	 * @param array                $args    Optional. Arguments to override class property defaults.
-	 */
-	public function __construct( $manager, $id, $args = array() ) {
-		parent::__construct( $manager, $id, $args );
-
-		$this->button_labels = array(
-			'select'       => __( 'Select File' ),
-			'change'       => __( 'Change File' ),
-			'default'      => __( 'Default' ),
-			'remove'       => __( 'Remove' ),
-			'placeholder'  => __( 'No file selected' ),
-			'frame_title'  => __( 'Select File' ),
-			'frame_button' => __( 'Choose File' ),
-		);
-	}
-
-	/**
-	 * Enqueue control related scripts/styles.
-	 *
-	 * @since 3.4.0
-	 * @since 4.2.0 Moved from WP_Fields_API_Upload_Control.
-	 */
-	public function enqueue() {
-		wp_enqueue_media();
-	}
-
-	/**
-	 * Refresh the parameters passed to the JavaScript via JSON.
-	 *
-	 * @since 3.4.0
-	 * @since 4.2.0 Moved from WP_Fields_API_Upload_Control.
-	 *
-	 * @see WP_Fields_API_Control::to_json()
-	 */
-	public function to_json() {
-		parent::to_json();
-		$this->json['label'] = html_entity_decode( $this->label, ENT_QUOTES, get_bloginfo( 'charset' ) );
-		$this->json['mime_type'] = $this->mime_type;
-		$this->json['button_labels'] = $this->button_labels;
-		$this->json['canUpload'] = current_user_can( 'upload_files' );
-
-		$value = $this->value();
-
-		if ( is_object( $this->setting ) ) {
-			if ( $this->setting->default ) {
-				// Fake an attachment model - needs all fields used by template.
-				// Note that the default value must be a URL, NOT an attachment ID.
-				$type = in_array( substr( $this->setting->default, -3 ), array( 'jpg', 'png', 'gif', 'bmp' ) ) ? 'image' : 'document';
-				$default_attachment = array(
-					'id' => 1,
-					'url' => $this->setting->default,
-					'type' => $type,
-					'icon' => wp_mime_type_icon( $type ),
-					'title' => basename( $this->setting->default ),
-				);
-
-				if ( 'image' === $type ) {
-					$default_attachment['sizes'] = array(
-						'full' => array( 'url' => $this->setting->default ),
-					);
-				}
-
-				$this->json['defaultAttachment'] = $default_attachment;
-			}
-
-			if ( $value && $this->setting->default && $value === $this->setting->default ) {
-				// Set the default as the attachment.
-				$this->json['attachment'] = $this->json['defaultAttachment'];
-			} elseif ( $value ) {
-				$this->json['attachment'] = wp_prepare_attachment_for_js( $value );
-			}
+			return $this->choices;
 		}
+
+		return null;
+
 	}
 
-	/**
-	 * Don't render any content for this control from PHP.
-	 *
-	 * @since 3.4.0
-	 * @since 4.2.0 Moved from WP_Fields_API_Upload_Control.
-	 *
-	 * @see WP_Fields_API_Media_Control::content_template()
-	 */
-	public function render_content() {}
-
-	/**
-	 * Render a JS template for the content of the media control.
-	 *
-	 * @since 4.1.0
-	 * @since 4.2.0 Moved from WP_Fields_API_Upload_Control.
-	 */
-	public function content_template() {
-		?>
-		<label for="{{ data.settings['default'] }}-button">
-			<# if ( data.label ) { #>
-				<span class="customize-control-title">{{ data.label }}</span>
-			<# } #>
-			<# if ( data.description ) { #>
-				<span class="description customize-control-description">{{{ data.description }}}</span>
-			<# } #>
-		</label>
-
-		<# if ( data.attachment && data.attachment.id ) { #>
-			<div class="current">
-				<div class="container">
-					<div class="attachment-media-view attachment-media-view-{{ data.attachment.type }} {{ data.attachment.orientation }}">
-						<div class="thumbnail thumbnail-{{ data.attachment.type }}">
-							<# if ( 'image' === data.attachment.type && data.attachment.sizes && data.attachment.sizes.medium ) { #>
-								<img class="attachment-thumb" src="{{ data.attachment.sizes.medium.url }}" draggable="false" />
-							<# } else if ( 'image' === data.attachment.type && data.attachment.sizes && data.attachment.sizes.full ) { #>
-								<img class="attachment-thumb" src="{{ data.attachment.sizes.full.url }}" draggable="false" />
-							<# } else if ( 'audio' === data.attachment.type ) { #>
-								<# if ( data.attachment.image && data.attachment.image.src && data.attachment.image.src !== data.attachment.icon ) { #>
-									<img src="{{ data.attachment.image.src }}" class="thumbnail" draggable="false" />
-								<# } else { #>
-									<img src="{{ data.attachment.icon }}" class="attachment-thumb type-icon" draggable="false" />
-								<# } #>
-								<p class="attachment-meta attachment-meta-title">&#8220;{{ data.attachment.title }}&#8221;</p>
-								<# if ( data.attachment.album || data.attachment.meta.album ) { #>
-									<p class="attachment-meta"><em>{{ data.attachment.album || data.attachment.meta.album }}</em></p>
-								<# } #>
-								<# if ( data.attachment.artist || data.attachment.meta.artist ) { #>
-									<p class="attachment-meta">{{ data.attachment.artist || data.attachment.meta.artist }}</p>
-								<# } #>
-								<audio style="visibility: hidden" controls class="wp-audio-shortcode" width="100%" preload="none">
-									<source type="{{ data.attachment.mime }}" src="{{ data.attachment.url }}"/>
-								</audio>
-							<# } else if ( 'video' === data.attachment.type ) { #>
-								<div class="wp-media-wrapper wp-video">
-									<video controls="controls" class="wp-video-shortcode" preload="metadata"
-										<# if ( data.attachment.image && data.attachment.image.src !== data.attachment.icon ) { #>poster="{{ data.attachment.image.src }}"<# } #>>
-										<source type="{{ data.attachment.mime }}" src="{{ data.attachment.url }}"/>
-									</video>
-								</div>
-							<# } else { #>
-								<img class="attachment-thumb type-icon icon" src="{{ data.attachment.icon }}" draggable="false" />
-								<p class="attachment-title">{{ data.attachment.title }}</p>
-							<# } #>
-						</div>
-					</div>
-				</div>
-			</div>
-			<div class="actions">
-				<# if ( data.canUpload ) { #>
-					<button type="button" class="button remove-button"><?php echo $this->button_labels['remove']; ?></button>
-					<button type="button" class="button upload-button" id="{{ data.settings['default'] }}-button"><?php echo $this->button_labels['change']; ?></button>
-					<div style="clear:both"></div>
-				<# } #>
-			</div>
-		<# } else { #>
-			<div class="current">
-				<div class="container">
-					<div class="placeholder">
-						<div class="inner">
-							<span>
-								<?php echo $this->button_labels['placeholder']; ?>
-							</span>
-						</div>
-					</div>
-				</div>
-			</div>
-			<div class="actions">
-				<# if ( data.defaultAttachment ) { #>
-					<button type="button" class="button default-button"><?php echo $this->button_labels['default']; ?></button>
-				<# } #>
-				<# if ( data.canUpload ) { #>
-					<button type="button" class="button upload-button" id="{{ data.settings['default'] }}-button"><?php echo $this->button_labels['select']; ?></button>
-				<# } #>
-				<div style="clear:both"></div>
-			</div>
-		<# } #>
-		<?php
-	}
-}
-
-/**
- * Customize Upload Control Class.
- *
- * @since 3.4.0
- *
- * @see WP_Fields_API_Media_Control
- */
-class WP_Fields_API_Upload_Control extends WP_Fields_API_Media_Control {
-	public $type          = 'upload';
-	public $mime_type     = '';
-	public $button_labels = array();
-	public $removed = ''; // unused
-	public $context; // unused
-	public $extensions = array(); // unused
-
-	/**
-	 * Refresh the parameters passed to the JavaScript via JSON.
-	 *
-	 * @since 3.4.0
-	 *
-	 * @uses WP_Fields_API_Media_Control::to_json()
-	 */
-	public function to_json() {
-		parent::to_json();
-
-		$value = $this->value();
-		if ( $value ) {
-			// Get the attachment model for the existing file.
-			$attachment_id = attachment_url_to_postid( $value );
-			if ( $attachment_id ) {
-				$this->json['attachment'] = wp_prepare_attachment_for_js( $attachment_id );
-			}
-		}
-	}
-}
-
-/**
- * Customize Image Control class.
- *
- * @since 3.4.0
- *
- * @see WP_Fields_API_Upload_Control
- */
-class WP_Fields_API_Image_Control extends WP_Fields_API_Upload_Control {
-	public $type = 'image';
-	public $mime_type = 'image';
-
-	/**
-	 * Constructor.
-	 *
-	 * @since 3.4.0
-	 * @uses WP_Fields_API_Upload_Control::__construct()
-	 *
-	 * @param WP_Customize_Manager $manager Customizer bootstrap instance.
-	 * @param string               $id      Control ID.
-	 * @param array                $args    Optional. Arguments to override class property defaults.
-	 */
-	public function __construct( $manager, $id, $args = array() ) {
-		parent::__construct( $manager, $id, $args );
-
-		$this->button_labels = array(
-			'select'       => __( 'Select Image' ),
-			'change'       => __( 'Change Image' ),
-			'remove'       => __( 'Remove' ),
-			'default'      => __( 'Default' ),
-			'placeholder'  => __( 'No image selected' ),
-			'frame_title'  => __( 'Select Image' ),
-			'frame_button' => __( 'Choose Image' ),
-		);
-	}
-
-	/**
-	 * @since 3.4.2
-	 * @deprecated 4.1.0
-	 */
-	public function prepare_control() {}
-
-	/**
-	 * @since 3.4.0
-	 * @deprecated 4.1.0
-	 *
-	 * @param string $id
-	 * @param string $label
-	 * @param mixed $callback
-	 */
-	public function add_tab( $id, $label, $callback ) {}
-
-	/**
-	 * @since 3.4.0
-	 * @deprecated 4.1.0
-	 *
-	 * @param string $id
-	 */
-	public function remove_tab( $id ) {}
-
-	/**
-	 * @since 3.4.0
-	 * @deprecated 4.1.0
-	 *
-	 * @param string $url
-	 * @param string $thumbnail_url
-	 */
-	public function print_tab_image( $url, $thumbnail_url = null ) {}
 }

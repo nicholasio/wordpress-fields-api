@@ -49,7 +49,7 @@ final class WP_Fields_API {
 	protected static $controls = array();
 
 	/**
-	 * Screen types that may be rendered from JS templates.
+	 * Screen types that may be rendered.
 	 *
 	 * @access protected
 	 * @var array
@@ -57,7 +57,7 @@ final class WP_Fields_API {
 	protected static $registered_screen_types = array();
 
 	/**
-	 * Section types that may be rendered from JS templates.
+	 * Section types that may be rendered.
 	 *
 	 * @access protected
 	 * @var array
@@ -65,7 +65,15 @@ final class WP_Fields_API {
 	protected static $registered_section_types = array();
 
 	/**
-	 * Controls that may be rendered from JS templates.
+	 * Field types that may be rendered.
+	 *
+	 * @access protected
+	 * @var array
+	 */
+	protected static $registered_field_types = array();
+
+	/**
+	 * Control types that may be rendered.
 	 *
 	 * @access protected
 	 * @var array
@@ -195,11 +203,8 @@ final class WP_Fields_API {
 		} elseif ( isset( self::$screens[ $object_type ][ $object_name ] ) ) {
 			// Late init.
 			foreach ( self::$screens[ $object_type ][ $object_name ] as $id => $screen ) {
-				if ( is_array( $screen ) ) {
-					self::$screens[ $object_type ][ $object_name ][ $id ]['object_name'] = $object_name;
-
-					self::$screens[ $object_type ][ $object_name ][ $id ] = new WP_Fields_API_Screen( $object_type, $id, $screen );
-				}
+				// Late init
+				self::$screens[ $object_type ][ $object_name ][ $id ] = $this->setup_screen( $object_type, $id, $object_name, $screen );
 			}
 
 			$screens = self::$screens[ $object_type ][ $object_name ];
@@ -278,13 +283,47 @@ final class WP_Fields_API {
 
 		if ( isset( self::$screens[ $object_type ][ $object_name ][ $id ] ) ) {
 			// Late init
-			if ( is_array( self::$screens[ $object_type ][ $object_name ][ $id ] ) ) {
-				self::$screens[ $object_type ][ $object_name ][ $id ]['object_name'] = $object_name;
-
-				self::$screens[ $object_type ][ $object_name ][ $id ] = new WP_Fields_API_Screen( $object_type, $id, self::$screens[ $object_type ][ $object_name ][ $id ] );
-			}
+			self::$screens[ $object_type ][ $object_name ][ $id ] = $this->setup_screen( $object_type, $id, $object_name, self::$screens[ $object_type ][ $object_name ][ $id ] );
 
 			$screen = self::$screens[ $object_type ][ $object_name ][ $id ];
+		}
+
+		return $screen;
+
+	}
+
+	/**
+	 * Setup the screen.
+	 *
+	 * @access public
+	 *
+	 * @param string $object_type Object type.
+	 * @param string $id          ID of the screen.
+	 * @param string $object_name Object name (for post types and taxonomies).
+	 * @param array  $args        Screen arguments.
+	 *
+	 * @return WP_Fields_API_Screen|null $screen The screen object.
+	 */
+	public function setup_screen( $object_type, $id, $object_name = null, $args = null ) {
+
+		$screen = null;
+
+		$screen_class = 'WP_Fields_API_Screen';
+
+		if ( is_a( $args, $screen_class ) ) {
+			$screen = $args;
+		} elseif ( is_array( $args ) ) {
+			$args['object_name'] = $object_name;
+
+			if ( ! empty( $args['type'] ) ) {
+				if ( ! empty( self::$registered_screen_types[ $args['type'] ] ) ) {
+					$screen_class = self::$registered_screen_types[ $args['type'] ];
+				} elseif ( in_array( $args['type'], self::$registered_screen_types ) ) {
+					$screen_class = $args['type'];
+				}
+			}
+
+			$screen = new $screen_class( $object_type, $id, $args );
 		}
 
 		return $screen;
@@ -329,19 +368,22 @@ final class WP_Fields_API {
 	}
 
 	/**
-	 * Register a customize screen type.
-	 *
-	 * Registered types are eligible to be rendered via JS and created dynamically.
+	 * Register a screen type.
 	 *
 	 * @access public
 	 *
 	 * @see    WP_Fields_API_Screen
 	 *
-	 * @param string $panel Name of a custom screen which is a subclass of WP_Fields_API_Screen.
+	 * @param string $type         Screen type ID.
+	 * @param string $screen_class Name of a custom screen which is a subclass of WP_Fields_API_Screen.
 	 */
-	public function register_screen_type( $screen ) {
+	public function register_screen_type( $type, $screen_class = null ) {
 
-		self::$registered_screen_types[] = $screen;
+		if ( null === $screen_class ) {
+			$screen_class = $type;
+		}
+
+		self::$registered_screen_types[ $type ] = $screen_class;
 
 	}
 
@@ -355,8 +397,8 @@ final class WP_Fields_API {
 		/**
 		 * @var WP_Fields_API_Screen $screen
 		 */
-		foreach ( self::$registered_screen_types as $screen_type ) {
-			$screen = new $screen_type( 'temp', array() );
+		foreach ( self::$registered_screen_types as $screen_type => $screen_class ) {
+			$screen = $this->setup_screen( null, 'temp', null, array( 'type' => $screen_type ) );
 
 			$screen->print_template();
 		}
@@ -419,11 +461,8 @@ final class WP_Fields_API {
 		} elseif ( isset( self::$sections[ $object_type ][ $object_name ] ) ) {
 			// Late init
 			foreach ( self::$sections[ $object_type ][ $object_name ] as $id => $section ) {
-				if ( is_array( $section ) ) {
-					self::$sections[ $object_type ][ $object_name ][ $id ]['object_name'] = $object_name;
-
-					self::$sections[ $object_type ][ $object_name ][ $id ] = new WP_Fields_API_Section( $object_type, $id, $section );
-				}
+				// Late init
+				self::$sections[ $object_type ][ $object_name ][ $id ] = $this->setup_section( $object_type, $id, $object_name, $section );
 			}
 
 			$sections = self::$sections[ $object_type ][ $object_name ];
@@ -515,13 +554,47 @@ final class WP_Fields_API {
 
 		if ( isset( self::$sections[ $object_type ][ $object_name ][ $id ] ) ) {
 			// Late init
-			if ( is_array( self::$sections[ $object_type ][ $object_name ][ $id ] ) ) {
-				self::$sections[ $object_type ][ $object_name ][ $id ]['object_name'] = $object_name;
-
-				self::$sections[ $object_type ][ $object_name ][ $id ] = new WP_Fields_API_Section( $object_type, $id, self::$sections[ $object_type ][ $object_name ][ $id ] );
-			}
+			self::$sections[ $object_type ][ $object_name ][ $id ] = $this->setup_section( $object_type, $id, $object_name, self::$sections[ $object_type ][ $object_name ][ $id ] );
 
 			$section = self::$sections[ $object_type ][ $object_name ][ $id ];
+		}
+
+		return $section;
+
+	}
+
+	/**
+	 * Setup the section.
+	 *
+	 * @access public
+	 *
+	 * @param string $object_type Object type.
+	 * @param string $id          ID of the section.
+	 * @param string $object_name Object name (for post types and taxonomies).
+	 * @param array  $args        Section arguments.
+	 *
+	 * @return WP_Fields_API_Screen|null $section The section object.
+	 */
+	public function setup_section( $object_type, $id, $object_name = null, $args = null ) {
+
+		$section = null;
+
+		$section_class = 'WP_Fields_API_Section';
+
+		if ( is_a( $args, $section_class ) ) {
+			$section = $args;
+		} elseif ( is_array( $args ) ) {
+			$args['object_name'] = $object_name;
+
+			if ( ! empty( $args['type'] ) ) {
+				if ( ! empty( self::$registered_section_types[ $args['type'] ] ) ) {
+					$section_class = self::$registered_section_types[ $args['type'] ];
+				} elseif ( in_array( $args['type'], self::$registered_section_types ) ) {
+					$section_class = $args['type'];
+				}
+			}
+
+			$section = new $section_class( $object_type, $id, $args );
 		}
 
 		return $section;
@@ -566,19 +639,22 @@ final class WP_Fields_API {
 	}
 
 	/**
-	 * Register a customize section type.
-	 *
-	 * Registered types are eligible to be rendered via JS and created dynamically.
+	 * Register a section type.
 	 *
 	 * @access public
 	 *
 	 * @see    WP_Fields_API_Section
 	 *
-	 * @param string $section Name of a custom section which is a subclass of WP_Fields_API_Section.
+	 * @param string $type          Section type ID.
+	 * @param string $section_class Name of a custom section which is a subclass of WP_Fields_API_Section.
 	 */
-	public function register_section_type( $section ) {
+	public function register_section_type( $type, $section_class = null ) {
 
-		self::$registered_section_types[] = $section;
+		if ( null === $section_class ) {
+			$section_class = $type;
+		}
+
+		self::$registered_section_types[ $type ] = $section_class;
 
 	}
 
@@ -592,8 +668,8 @@ final class WP_Fields_API {
 		/**
 		 * @var $section WP_Fields_API_Section
 		 */
-		foreach ( self::$registered_section_types as $section_type ) {
-			$section = new $section_type( 'temp', array() );
+		foreach ( self::$registered_control_types as $section_type => $section_class ) {
+			$section = $this->setup_section( null, 'temp', null, array( 'type' => $section_type ) );
 
 			$section->print_template();
 		}
@@ -630,11 +706,8 @@ final class WP_Fields_API {
 		} elseif ( isset( self::$fields[ $object_type ][ $object_name ] ) ) {
 			// Late init
 			foreach ( self::$fields[ $object_type ][ $object_name ] as $id => $field ) {
-				if ( is_array( $field ) ) {
-					self::$fields[ $object_type ][ $object_name ][ $id ]['object_name'] = $object_name;
-
-					self::$fields[ $object_type ][ $object_name ][ $id ] = new WP_Fields_API_Field( $object_type, $id, $field );
-				}
+				// Late init
+				self::$fields[ $object_type ][ $object_name ][ $id ] = $this->setup_field( $object_type, $id, $object_name, $field );
 			}
 
 			$fields = self::$fields[ $object_type ][ $object_name ];
@@ -743,13 +816,47 @@ final class WP_Fields_API {
 
 		if ( isset( self::$fields[ $object_type ][ $object_name ][ $id ] ) ) {
 			// Late init
-			if ( is_array( self::$fields[ $object_type ][ $object_name ][ $id ] ) ) {
-				self::$fields[ $object_type ][ $object_name ][ $id ]['object_name'] = $object_name;
-
-				self::$fields[ $object_type ][ $object_name ][ $id ] = new WP_Fields_API_Field( $object_type, $id, self::$fields[ $object_type ][ $object_name ][ $id ] );
-			}
+			self::$fields[ $object_type ][ $object_name ][ $id ] = $this->setup_field( $object_type, $id, $object_name, self::$fields[ $object_type ][ $object_name ][ $id ] );
 
 			$field = self::$fields[ $object_type ][ $object_name ][ $id ];
+		}
+
+		return $field;
+
+	}
+
+	/**
+	 * Setup the field.
+	 *
+	 * @access public
+	 *
+	 * @param string $object_type Object type.
+	 * @param string $id          ID of the field.
+	 * @param string $object_name Object name (for post types and taxonomies).
+	 * @param array  $args        Field arguments.
+	 *
+	 * @return WP_Fields_API_Screen|null $field The field object.
+	 */
+	public function setup_field( $object_type, $id, $object_name = null, $args = null ) {
+
+		$field = null;
+
+		$field_class = 'WP_Fields_API_Field';
+
+		if ( is_a( $args, $field_class ) ) {
+			$field = $args;
+		} elseif ( is_array( $args ) ) {
+			$args['object_name'] = $object_name;
+
+			if ( ! empty( $args['type'] ) ) {
+				if ( ! empty( self::$registered_field_types[ $args['type'] ] ) ) {
+					$field_class = self::$registered_field_types[ $args['type'] ];
+				} elseif ( in_array( $args['type'], self::$registered_field_types ) ) {
+					$field_class = $args['type'];
+				}
+			}
+
+			$field = new $field_class( $object_type, $id, $args );
 		}
 
 		return $field;
@@ -790,6 +897,26 @@ final class WP_Fields_API {
 				unset( self::$fields[ $object_type ][ $object_name ][ $id ] );
 			}
 		}
+
+	}
+
+	/**
+	 * Register a field type.
+	 *
+	 * @access public
+	 *
+	 * @see    WP_Fields_API_Field
+	 *
+	 * @param string $type         Field type ID.
+	 * @param string $screen_class Name of a custom field type which is a subclass of WP_Fields_API_Field.
+	 */
+	public function register_field_type( $type, $field_class = null ) {
+
+		if ( null === $field_class ) {
+			$field_class = $type;
+		}
+
+		self::$registered_field_types[ $type ] = $field_class;
 
 	}
 
@@ -849,11 +976,8 @@ final class WP_Fields_API {
 		} elseif ( isset( self::$controls[ $object_type ][ $object_name ] ) ) {
 			// Late init
 			foreach ( self::$controls[ $object_type ][ $object_name ] as $id => $control ) {
-				if ( is_array( $control ) ) {
-					self::$controls[ $object_type ][ $object_name ][ $id ]['object_name'] = $object_name;
-
-					self::$controls[ $object_type ][ $object_name ][ $id ] = new WP_Fields_API_Control( $object_type, $id, $control );
-				}
+				// Late init
+				self::$controls[ $object_type ][ $object_name ][ $id ] = $this->setup_control( $object_type, $id, $object_name, $control );
 			}
 
 			$controls = self::$controls[ $object_type ][ $object_name ];
@@ -947,13 +1071,47 @@ final class WP_Fields_API {
 
 		if ( isset( self::$controls[ $object_type ][ $object_name ][ $id ] ) ) {
 			// Late init
-			if ( is_array( self::$controls[ $object_type ][ $object_name ][ $id ] ) ) {
-				self::$controls[ $object_type ][ $object_name ][ $id ]['object_name'] = $object_name;
-
-				self::$controls[ $object_type ][ $object_name ][ $id ] = new WP_Fields_API_Control( $object_type, $id, self::$controls[ $object_type ][ $object_name ][ $id ] );
-			}
+			self::$controls[ $object_type ][ $object_name ][ $id ] = $this->setup_control( $object_type, $id, $object_name, self::$controls[ $object_type ][ $object_name ][ $id ] );
 
 			$control = self::$controls[ $object_type ][ $object_name ][ $id ];
+		}
+
+		return $control;
+
+	}
+
+	/**
+	 * Setup the field control.
+	 *
+	 * @access public
+	 *
+	 * @param string $object_type Object type.
+	 * @param string $id          ID of the control.
+	 * @param string $object_name Object name (for post types and taxonomies).
+	 * @param array  $args        Control arguments.
+	 *
+	 * @return WP_Fields_API_Control|null $control The control object.
+	 */
+	public function setup_control( $object_type, $id, $object_name = null, $args = null ) {
+
+		$control = null;
+
+		$control_class = 'WP_Fields_API_Control';
+
+		if ( is_a( $args, $control_class ) ) {
+			$control = $args;
+		} elseif ( is_array( $args ) ) {
+			$args['object_name'] = $object_name;
+
+			if ( ! empty( $args['type'] ) ) {
+				if ( ! empty( self::$registered_control_types[ $args['type'] ] ) ) {
+					$control_class = self::$registered_control_types[ $args['type'] ];
+				} elseif ( in_array( $args['type'], self::$registered_control_types ) ) {
+					$control_class = $args['type'];
+				}
+			}
+
+			$control = new $control_class( $object_type, $id, $args );
 		}
 
 		return $control;
@@ -1000,16 +1158,20 @@ final class WP_Fields_API {
 	/**
 	 * Register a field control type.
 	 *
-	 * Registered types are eligible to be rendered via JS and created dynamically.
-	 *
 	 * @access public
 	 *
-	 * @param string $control Name of a custom control which is a subclass of
-	 *                        {@see WP_Fields_API_Control}.
+	 * @see    WP_Fields_API_Control
+	 *
+	 * @param string $type          Control type ID.
+	 * @param string $control_class Name of a custom control which is a subclass of WP_Fields_API_Control.
 	 */
-	public function register_control_type( $control ) {
+	public function register_control_type( $type, $control_class = null ) {
 
-		self::$registered_control_types[] = $control;
+		if ( null === $control_class ) {
+			$control_class = $type;
+		}
+
+		self::$registered_control_types[ $type ] = $control_class;
 
 	}
 
@@ -1023,8 +1185,8 @@ final class WP_Fields_API {
 		/**
 		 * @var $control WP_Fields_API_Control
 		 */
-		foreach ( self::$registered_control_types as $control_type ) {
-			$control = new $control_type( 'temp', array() );
+		foreach ( self::$registered_control_types as $control_type => $control_class ) {
+			$control = $this->setup_control( null, 'temp', null, array( 'type' => $control_type ) );
 
 			$control->print_template();
 		}
@@ -1275,12 +1437,17 @@ final class WP_Fields_API {
 	 */
 	public function register_controls() {
 
-		/* Control Types (custom control classes) */
-		/*$this->register_control_type( 'WP_Fields_API_Text_Control' );
-		$this->register_control_type( 'WP_Fields_API_Color_Control' );
-		$this->register_control_type( 'WP_Fields_API_Upload_Control' );
-		$this->register_control_type( 'WP_Fields_API_Image_Control' );
-		$this->register_control_type( 'WP_Fields_API_Background_Image_Control' );*/
+		/* Control Types */
+		$this->register_control_type( 'text', 'WP_Fields_API_Control' );
+		$this->register_control_type( 'checkbox', 'WP_Fields_API_Checkbox_Control' );
+		$this->register_control_type( 'multi-checkbox', 'WP_Fields_API_Multi_Checkbox_Control' );
+		$this->register_control_type( 'radio', 'WP_Fields_API_Radio_Control' );
+		$this->register_control_type( 'select', 'WP_Fields_API_Select_Control' );
+		$this->register_control_type( 'dropdown-pages', 'WP_Fields_API_Dropdown_Pages_Control' );
+		$this->register_control_type( 'color', 'WP_Fields_API_Color_Control' );
+		$this->register_control_type( 'media', 'WP_Fields_API_Media_Control' );
+		$this->register_control_type( 'upload', 'WP_Fields_API_Upload_Control' );
+		$this->register_control_type( 'image', 'WP_Fields_API_Image_Control' );
 
 		/**
 		 * Fires once WordPress has loaded, allowing control types to be registered.
@@ -1316,47 +1483,6 @@ final class WP_Fields_API {
 		}
 
 		return $found;
-
-	}
-
-	/**
-	 * Parse the incoming $_POST['customized'] JSON data and store the unsanitized
-	 * fields for subsequent post_value() lookups.
-	 *
-	 * @return array
-	 */
-	public function unsanitized_post_values() {
-
-		if ( ! isset( $this->_post_values ) ) {
-			$this->_post_values = false;
-		}
-
-		if ( empty( $this->_post_values ) ) {
-			return array();
-		}
-
-		return $this->_post_values;
-
-	}
-
-	/**
-	 * Return the sanitized value for a given field from the request's POST data.
-	 * Introduced 'default' parameter.
-	 *
-	 * @param WP_Fields_API_Field $field   A WP_Fields_API_Field derived object
-	 * @param mixed               $default value returned $field has no post value (added in 4.2.0).
-	 *
-	 * @return string|mixed $post_value Sanitized value or the $default provided
-	 */
-	public function post_value( $field, $default = null ) {
-
-		$post_values = $this->unsanitized_post_values();
-
-		if ( array_key_exists( $field->id, $post_values ) ) {
-			return $field->sanitize( $post_values[ $field->id ] );
-		}
-
-		return $default;
 
 	}
 

@@ -128,6 +128,19 @@ class WP_Fields_API_Screen {
 	public $active_callback = '';
 
 	/**
+	 * Capabilities Callback.
+	 *
+	 * @access public
+	 *
+	 * @see WP_Fields_API_Screen::check_capabilities()
+	 *
+	 * @var callable Callback is called with one argument, the instance of
+	 *               WP_Fields_API_Screen, and returns bool to indicate whether
+	 *               the screen has capabilities to be used.
+	 */
+	public $capabilities_callback = '';
+
+	/**
 	 * Constructor.
 	 *
 	 * Parameters are not set to maintain PHP overloading compatibility (strict standards)
@@ -188,7 +201,11 @@ class WP_Fields_API_Screen {
 	final public function active() {
 
 		$screen = $this;
-		$active = call_user_func( $this->active_callback, $this );
+		$active = true;
+
+		if ( is_callable( $this->active_callback ) ) {
+			$active = call_user_func( $this->active_callback, $this );
+		}
 
 		/**
 		 * Filter response of WP_Fields_API_Screen::active().
@@ -252,7 +269,13 @@ class WP_Fields_API_Screen {
 			return false;
 		}
 
-		return true;
+		$access = true;
+
+		if ( is_callable( $this->capabilities_callback ) ) {
+			$access = call_user_func( $this->capabilities_callback, $this );
+		}
+
+		return $access;
 
 	}
 
