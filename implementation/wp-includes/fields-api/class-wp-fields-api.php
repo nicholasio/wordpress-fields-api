@@ -97,6 +97,7 @@ final class WP_Fields_API {
 		// Include section types
 		require_once( $fields_api_dir . 'section-types/class-wp-fields-api-table-section.php' );
 		require_once( $fields_api_dir . 'section-types/class-wp-fields-api-meta-box-section.php' );
+		require_once( $fields_api_dir . 'section-types/class-wp-fields-api-widget-section.php' );
 
 		// Include control types
 		require_once( $fields_api_dir . 'control-types/class-wp-fields-api-textarea-control.php' );
@@ -109,6 +110,10 @@ final class WP_Fields_API {
 		require_once( $fields_api_dir . 'control-types/class-wp-fields-api-color-control.php' );
 		require_once( $fields_api_dir . 'control-types/class-wp-fields-api-media-control.php' );
 		require_once( $fields_api_dir . 'control-types/class-wp-fields-api-media-file-control.php' );
+
+		//Widget - we need this early
+		require_once( WP_FIELDS_API_DIR . 'implementation/wp-includes/fields-api/forms/class-wp-fields-api-form-widget.php' );
+		require_once( WP_FIELDS_API_DIR . 'implementation/wp-includes/fields-api/class-wp-widgets-fields-api.php' );
 
 		// Register our wp_loaded() first before WP_Customize_Manage::wp_loaded()
 		add_action( 'wp_loaded', array( $this, 'wp_loaded' ), 9 );
@@ -1594,6 +1599,7 @@ final class WP_Fields_API {
 		/* Section Types */
 		$this->register_section_type( 'meta-box', 'WP_Fields_API_Meta_Box_Section' );
 		$this->register_section_type( 'table', 'WP_Fields_API_Table_Section' );
+		$this->register_section_type( 'widget', 'WP_Fields_API_Widget_Section' );
 
 		/* Control Types */
 		$this->register_control_type( 'text', 'WP_Fields_API_Control' );
